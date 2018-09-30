@@ -13,31 +13,46 @@ $filtered_events = array_filter($events, function ($event) {
     return $event['start_date'] && $event['image_url'];
 });
 
-foreach ($filtered_events as $event) {
+$nb_events_to_import = count($filtered_events);
+
+echo "###################################################\r\n";
+echo "#\r\n";
+echo "# Importing {$nb_events_to_import} events\r\n";
+echo "#\r\n";
+echo "###################################################\r\n";
+
+foreach ($filtered_events as $i => $event) {
     $image = $event['image_url'];
     $image_name = slugify($event['title']);
 
-    $data = [
-        'title' => ucwords(mb_strtolower($event['title'])),
-        'description' => $event['description'],
-        'date' => date('Y-m-d', strtotime($event['start_date']))
-    ];
+    try {
+        $title = ucwords(mb_strtolower($event['title']));
+        $description = $event['description'];
 
-    $res = $client->request('POST', $api_base_url, [ 'form_params' => $data ]);
-    $response = json_decode((string) $res->getBody(), true)['data'];
+        $data = [
+            'title' => iconv(mb_detect_encoding($title, mb_detect_order(), true), "UTF-8", $title),
+            'description' => iconv(mb_detect_encoding($description, mb_detect_order(), true), "UTF-8", $description),
+            'date' => date('Y-m-d', strtotime($event['start_date']))
+        ];
 
-    $res = $client->request('POST', $api_base_url . "/{$response['id']}/medias", [
-        'multipart' => [
-            [
-                'name'     => 'file',
-                'contents' => file_get_contents($image),
-                'filename' => "{$image_name}.jpg",
+        $res = $client->request('POST', $api_base_url, [ 'form_params' => $data ]);
+        $response = json_decode((string) $res->getBody(), true)['data'];
+
+        $res = $client->request('POST', $api_base_url . "/{$response['id']}/medias", [
+            'multipart' => [
+                [
+                    'name'     => 'file',
+                    'contents' => file_get_contents($image),
+                    'filename' => "{$image_name}.jpg",
+                ]
             ]
-        ]
-    ]);
+        ]);
 
-    echo '[' . date('H:i:s') . "] Event {$response['id']} added. Sleeping 1.2 seconds.\r\n";
-    sleep(1.2);
+        echo '[' . date('H:i:s') . "] Event {$response['id']} added. Sleeping 1.2 seconds.\r\n";
+        sleep(1.2);
+    } catch (\Exception $e) {
+        echo '[' . date('H:i:s') . "] Event {$i} NOT added, got an exception.\r\n";
+    }
 }
 
 function slugify($text)
